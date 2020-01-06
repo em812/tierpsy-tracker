@@ -52,18 +52,18 @@ def _h_smooth_curve_all(curves, window=5, pol_degree=3):
 
 
 class WormFromTableSimple():
-    def __init__(self, 
-                file_name, 
-                worm_index, 
+    def __init__(self,
+                file_name,
+                worm_index,
                 use_skel_filter=True,
                 worm_index_type='worm_index_joined',
-                smooth_window=-1, 
+                smooth_window=-1,
                 POL_DEGREE_DFLT=3):
         # Populates an empty normalized worm.
         #if it does not exists return 1 as a default, like that we can still calculate the features in pixels and frames, instead of micrometers and seconds.
         self.microns_per_pixel = read_microns_per_pixel(file_name, dflt=1)
         self.fps = read_fps(file_name, dflt=1)
-        
+
         # savitzky-golay filter polynomial order default
         self.POL_DEGREE_DFLT = POL_DEGREE_DFLT
         # save the input parameters
@@ -90,7 +90,7 @@ class WormFromTableSimple():
             self.widths = _h_smooth_curve_all(
                 self.widths, window=self.smooth_window)
 
-        
+
         # assert the dimenssions of the read data are correct
         self._h_assert_data_dim()
 
@@ -107,7 +107,7 @@ class WormFromTableSimple():
             assert self.worm_index_type in trajectories_data_f
             good = trajectories_data_f[self.worm_index_type] == self.worm_index
             trajectories_data = trajectories_data_f.loc[good]
-                        
+
             try:
                 # try to read the time stamps, if there are repeated or not a
                 # number use the frame nuber instead
@@ -116,17 +116,17 @@ class WormFromTableSimple():
                     raise ValueError
                 else:
                     timestamp_inds = timestamp_raw.astype(np.int)
-                    
+
                     #deal in the case they are repeating indexes (this happends sometimes in the last frame)
                     timestamp_inds, ind = np.unique(timestamp_inds, return_index=True)
                     trajectories_data = trajectories_data.iloc[ind]
-                    
+
 
             except (ValueError, KeyError):
                 # if the time stamp fails use the frame_number value instead
                 # (the index of the mask) and return nan as the fps
                 timestamp_inds = trajectories_data['frame_number'].values
-            
+
 
             skel_table_id = trajectories_data['skeleton_id'].values
             # we need to use (.values) to be able to use the & operator
@@ -138,35 +138,35 @@ class WormFromTableSimple():
                     trajectories_data['is_good_skel'] == 1).values
             skel_table_id = skel_table_id[good_skeletons]
             timestamp_inds = timestamp_inds[good_skeletons]
-            
-            
+
+
             return skel_table_id, timestamp_inds
 
 
     def _h_read_data(self):
         skel_table_id, timestamp_inds = self._h_get_table_indexes()
-        
+
         if not np.array_equal(np.sort(timestamp_inds), timestamp_inds): #the time stamp must be sorted
             warnings.warn('{}: The timestamp is not sorted in worm_index {}'.format(self.file_name, self.worm_index))
-        
+
         # use real frames to define the size of the object arrays
         first_frame = np.min(timestamp_inds)
         last_frame = np.max(timestamp_inds)
         n_frames = last_frame - first_frame + 1
-        
+
         # get the apropiate index in the object array
         ind_ff = timestamp_inds - first_frame
 
         # get the number of segments from the normalized skeleton
         with tables.File(self.file_name, 'r') as ske_file_id:
             self.n_segments = ske_file_id.get_node('/skeleton').shape[1]
- 
+
         # add the data from the skeleton_id's and timestamps used
         self.timestamp = np.arange(first_frame, last_frame + 1)
-        
+
         self.skeleton_id = np.full(n_frames, -1, np.int32)
         self.skeleton_id[ind_ff] = skel_table_id
-        
+
         # initialize the rest of the arrays
         self.skeleton = np.full((n_frames, self.n_segments, 2), np.nan)
         self.ventral_contour = np.full((n_frames, self.n_segments, 2), np.nan)
@@ -175,16 +175,20 @@ class WormFromTableSimple():
 
         # read data from the skeletons table
         with tables.File(self.file_name, 'r') as ske_file_id:
+            datanames = [f._v_name for f in ske_file_id.list_nodes('/')]
             self.skeleton[ind_ff] = \
             ske_file_id.get_node('/skeleton')[skel_table_id, :, :] * self.microns_per_pixel
-            self.ventral_contour[ind_ff] = \
-            ske_file_id.get_node('/contour_side1')[skel_table_id, :, :] * self.microns_per_pixel
-            self.dorsal_contour[ind_ff] = \
-            ske_file_id.get_node('/contour_side2')[skel_table_id, :, :] * self.microns_per_pixel
-            self.widths[ind_ff] = \
-            ske_file_id.get_node('/contour_width')[skel_table_id, :] * self.microns_per_pixel
-            
-            
+            if '/contour_side1' in datanames:
+                self.ventral_contour[ind_ff] = \
+                ske_file_id.get_node('/contour_side1')[skel_table_id, :, :] * self.microns_per_pixel
+            if '/contour_side2' in datanames:
+                self.dorsal_contour[ind_ff] = \
+                ske_file_id.get_node('/contour_side2')[skel_table_id, :, :] * self.microns_per_pixel
+            if '/contour_width' in datanames:
+                self.widths[ind_ff] = \
+                ske_file_id.get_node('/contour_width')[skel_table_id, :] * self.microns_per_pixel
+
+
     def _h_assert_data_dim(self):
         # assertions to check the data has the proper dimensions
         fields2check = [
@@ -192,7 +196,7 @@ class WormFromTableSimple():
             'widths',
             'ventral_contour',
             'dorsal_contour']
-        
+
         for field in fields2check:
             A = getattr(self, field)
             assert A.shape[0] == self.n_frames
@@ -209,11 +213,11 @@ class WormFromTableSimple():
     @property
     def n_frames(self):
         return self.timestamp.size
-    
+
     @property
     def last_frame(self):
         return self.timestamp[-1]
-    
+
     @property
     def first_frame(self):
         return self.timestamp[0]
@@ -223,7 +227,7 @@ class WormFromTable(WormFromTableSimple):
         super().__init__(*args, **kwargs)
 
     def split(self, split_size):
-        '''subdivide so I do not have to start at the begining of a trajectory 
+        '''subdivide so I do not have to start at the begining of a trajectory
         (it is more likely that there was an error here)
         '''
         remainder =  self.n_frames % split_size
@@ -240,7 +244,7 @@ class WormFromTable(WormFromTableSimple):
         fields2split = [field for field, val in self.__dict__.items() if isinstance(val, np.ndarray)]
         # check all the fields have the same number of frames in the first dimension
         assert all(getattr(self, x).shape[0] for x in fields2split)
-        
+
         #copy the main object to initialize the smaller trajectories
         base_worm =copy.copy(self)
         #delete the ndarray fields so we don't copy large amount of data twice
@@ -250,7 +254,7 @@ class WormFromTable(WormFromTableSimple):
         splitted_worms = [copy.copy(base_worm) for n in range(n_splits)]
         for field in fields2split:
             splitted_field = np.split(getattr(self, field), split_ind, axis=0)
-            
+
             for worm_s, dat_s in zip(splitted_worms, splitted_field):
                 setattr(worm_s, field, dat_s)
 
@@ -289,16 +293,16 @@ class WormFromTable(WormFromTableSimple):
         if hasattr(self, 'stage_vec_inv'):
             print('The worm has been previously corrected. The attribute "stage_vec_inv" exists. ')
             return
-        
+
         self.ventral_side = read_ventral_side(self.file_name)
-        
+
         assert isGoodStageAligment(self.file_name)
         self.stage_vec_inv, _ = _h_get_stage_inv(self.file_name, self.timestamp)
 
         #remove data where the stage is moving (the blurred image can induce artifacts)
         self.is_stage_move = np.isnan(self.stage_vec_inv[:,0])
-        self.widths[self.is_stage_move, :] = np.nan 
-        
+        self.widths[self.is_stage_move, :] = np.nan
+
         for field in ['skeleton', 'ventral_contour', 'dorsal_contour']:
             if hasattr(self, field):
                 tmp_dat = getattr(self, field)
@@ -307,16 +311,16 @@ class WormFromTable(WormFromTableSimple):
             #tmp_dat[ii] = np.dot(rotation_matrix, tmp_dat[ii].T).T
                 tmp_dat = tmp_dat + self.stage_vec_inv[:, np.newaxis, :]
                 setattr(self, field, tmp_dat)
-        
+
 
 class WormStats():
 
     def __init__(self):
         '''get the info for each feature chategory'''
-        
+
         feat_names_file = os.path.join(AUX_FILES_DIR, 'features_names.csv')
         #feat_names_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', 'aux', 'features_names.csv')
-        
+
         self.extra_fields =  ['worm_index', 'n_frames', 'n_valid_skel', 'first_frame']
         self.features_info = pd.read_csv(feat_names_file, index_col=0)
         self.builtFeatAvgNames()  # create self.feat_avg_names
@@ -366,7 +370,7 @@ class WormStats():
 
             Return the feature list as an ordered dictionary.
         '''
-        
+
         if isinstance(worm_features, (dict, pd.DataFrame)):
             def read_feat(feat_name):
                 if feat_name in worm_features:
@@ -375,7 +379,7 @@ class WormStats():
                     return None
             motion_mode = read_feat('motion_modes')
         else:
-            
+
             def read_feat(feat_name):
                 feat_obj = self.features_info.loc[feat_name, 'feat_name_obj']
                 if feat_obj in  worm_features._features:
@@ -387,7 +391,7 @@ class WormStats():
 
         # return data as a numpy recarray
         feat_stats = np.full(1, np.nan, dtype=self.feat_avg_dtype)
-        
+
         for feat_name, feat_props in self.features_info.iterrows():
             tmp_data = read_feat(feat_name)
             if tmp_data is None:
@@ -425,7 +429,7 @@ class WormStats():
         #filter nan data
         valid = ~np.isnan(data)
         data = data[valid]
-        
+
         motion_types = OrderedDict()
         motion_types['all'] = np.nan
         if is_time_series:
@@ -433,14 +437,14 @@ class WormStats():
             # Paused or Backward motion
             motion_mode = motion_mode[valid]
             assert motion_mode.size == data.size
-            
+
             motion_types['forward'] = motion_mode == 1
             motion_types['paused'] = motion_mode == 0
             motion_types['backward'] = motion_mode == -1
 
         stats = OrderedDict()
         for key in motion_types:
-            
+
             if key == 'all':
                 sub_name = name
                 valid_data = data
@@ -450,7 +454,7 @@ class WormStats():
                 valid_data = data[motion_types[key]]
 
             assert not np.any(np.isnan(valid_data))
-            
+
             stats[sub_name] = stat_func(valid_data)
             if is_signed:
                 # if the feature is signed we can subdivide in positive,
@@ -460,15 +464,15 @@ class WormStats():
                 neg_valid = (valid_data < 0)
                 stats[sub_name + '_neg'] = stat_func(valid_data[neg_valid])
 
-                pos_valid = (valid_data > 0) 
+                pos_valid = (valid_data > 0)
                 stats[sub_name + '_pos'] = stat_func(valid_data[pos_valid])
         return stats
-                
+
 if __name__ == '__main__':
-    
+
     main_dir = '/Users/ajaver/OneDrive - Imperial College London/Local_Videos/single_worm/global_sample_v3/'
     base_name = 'N2 on food R_2011_09_13__11_59___3___3'
     skel_file = os.path.join(main_dir, base_name + '_skeletons.hdf5')
-    
+
     worm = WormFromTable(skel_file, 1)
 
