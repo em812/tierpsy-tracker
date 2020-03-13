@@ -277,7 +277,6 @@ def select_and_sort_columns(df, selected_feat):
             df[col] = np.nan
 
     df = df[[x for x in feat_df_id_cols if x in df.columns] + selected_feat]
-    print(selected_feat[0:5])
 
     return df
 
