@@ -277,6 +277,7 @@ def select_and_sort_columns(df, selected_feat):
             df[col] = np.nan
 
     df = df[[x for x in feat_df_id_cols if x in df.columns] + selected_feat]
+    print(selected_feat[0:5])
 
     return df
 
@@ -469,7 +470,7 @@ def calculate_summaries(
 if __name__ == '__main__':
 
     root_dir = \
-        '/Users/em812/Data/Tierpsy_GUI/test_results_multiwell/Syngenta'
+        '/Volumes/behavgenom$/Priota/Data/PaschalisChicagoTracking/Results/20200124/PC1/Set1'
         #'/Users/em812/Data/Tierpsy_GUI/test_results_multiwell/20190808_subset'
 
     is_manual_index = True

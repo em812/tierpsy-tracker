@@ -72,13 +72,10 @@ def read_data(fname, time_windows, time_units, fps, is_manual_index):
         timeseries_data = fid['/timeseries_data']
         blob_features = fid['/blob_features']
 
-        if is_manual_index:
+        if (is_manual_index) and ('worm_index_manual' in fid['/trajectories_data']):
             #keep only data labeled as worm or worm clusters
-            valid_labels = [WLAB[x] for x in ['WORM', 'WORMS']]
+            valid_labels = [WLAB[x] for x in ['U', 'WORM', 'WORMS']]
             trajectories_data = fid['/trajectories_data']
-            if not 'worm_index_manual' in trajectories_data:
-                #no manual index, nothing to do here
-                return
 
             good = trajectories_data['worm_label'].isin(valid_labels)
             good = good & (trajectories_data['skeleton_id'] >= 0)
